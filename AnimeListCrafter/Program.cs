@@ -1,5 +1,6 @@
 ﻿using AnimeListCrafter.Classes;
 using AnimeListCrafter.Entity;
+using System.Collections;
 using System.Text;
 
 namespace AnimeListCrafter
@@ -11,7 +12,7 @@ namespace AnimeListCrafter
             CrafterWorkIsNotWolf();
 
             Console.WriteLine("Фсё.");
-            Console.ReadKey();
+            Console.ReadKey(true);
         }
 
         static void CrafterWorkIsNotWolf()
@@ -66,16 +67,44 @@ namespace AnimeListCrafter
                 Console.WriteLine();
             } while (tmpUsername != null);
 
-
-
             if (usernames.Count == 0)
             {
                 Console.WriteLine("Рил?");
                 return;
             }
 
+            var filterSettings = new FilterSettings();
+            Console.WriteLine("Нажмите F чтобы изменить настройки фильтрации, или любую клавишу для применения настроек по умолчанию");
+            if (Console.ReadKey(true).Key == ConsoleKey.F)
+            {
+                Console.WriteLine("Укажите значения (N/Q/-/Z - нет, остальные - да)");
+
+                var dicSetAction = (Dictionary<string, bool> dic) =>
+                {
+                    foreach (var keyValuePair in dic)
+                    {
+                        Console.Write(keyValuePair.Key != "" ? keyValuePair.Key : "unknown");
+                        var key = Console.ReadKey(true).Key;
+                        bool anwser = !new ConsoleKey[] { ConsoleKey.N, ConsoleKey.Q, ConsoleKey.Z, ConsoleKey.OemMinus }.Contains(key);
+
+                        Console.WriteLine(anwser ? " +" : " -");
+                        dic[keyValuePair.Key] = anwser;
+                    }
+                };
+
+                Console.WriteLine();
+                dicSetAction(filterSettings.shiki_status);
+                Console.WriteLine();
+                dicSetAction(filterSettings.series_type);
+            }
+            Console.WriteLine();
+
+
             var animeListFiles = usernames.Select(u => Exporter.ExportAnimeListFromShikiToFileXml(u));
-            var animeLists = animeListFiles.Select(u => Parser.ImportAnimeListFromXml(u));
+            var animeLists = animeListFiles.Select(u => Parser.ImportAnimeListFromXml(u)
+                .Where(anime => filterSettings.shiki_status.GetValueOrDefault(anime.shiki_status, false))
+                .Where(anime => filterSettings.series_type.GetValueOrDefault(anime.series_type, false))
+                );
             var animes = animeLists.SelectMany(list => list).DistinctBy(anime => anime.series_animedb_id).ToList();
 
             var animeListFilesJson = usernames.Select(u => Exporter.ExportAnimeListFromShikiToFileJson(u));
@@ -97,25 +126,9 @@ namespace AnimeListCrafter
                 anime.TitleRu = titleRu;
             }
 
-            var filteredAnimes = animes
-                .Where(anime =>
-                                  anime.shiki_status == "Plan to Watch" ? false : false ||
-                                  anime.shiki_status == "Watching" ? true : false ||
-                                  anime.shiki_status == "Rewatching" ? true : false ||
-                                  anime.shiki_status == "Completed" ? true : false ||
-                                  anime.shiki_status == "On-Hold" ? true : false ||
-                                  anime.shiki_status == "Dropped" ? true : false)
-                .Where(anime =>
-                                  anime.series_type == "tv" ? true : false ||
-                                  anime.series_type == "ova" ? false : false ||
-                                  anime.series_type == "special" ? false : false ||
-                                  anime.series_type == "movie" ? true : false ||
-                                  anime.series_type == "ona" ? true : false ||
-                                  anime.series_type == "music" ? false : false ||
-                                  anime.series_type == "" ? false : false
-                );
+            Console.WriteLine("В");
 
-            var lines = filteredAnimes.Select(anime => anime.TitleRu).Order();
+            var lines = animes.Select(anime => anime.TitleRu).Order();
 
             Console.WriteLine($"Скрафчено. {(DateTime.Now - startingTime).TotalSeconds:f2} с");
             Console.WriteLine();
@@ -133,7 +146,6 @@ namespace AnimeListCrafter
             Console.WriteLine();
 
         }
-
     }
 }
 //TODO switch xml downloading to xmldoc.Load
