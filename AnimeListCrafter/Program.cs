@@ -19,8 +19,73 @@ namespace AnimeListCrafter
         {
             Console.WriteLine("Скормите ники шики:");
 
-            List<string> usernames = new List<string>();
+            List<string> usernames = GetUsernamesFromUI();
+            if (usernames.Count == 0)
+            {
+                Console.WriteLine("Рил?");
+                return;
+            }
 
+            var filterSettings = GetFilterSettingsFromUI();
+
+            DateTime startingTime = DateTime.Now;
+            Console.WriteLine("Крафчу");
+
+            var animes = CraftAnimesWithRuTitlesFromShikimori(usernames, filterSettings);
+
+            Console.WriteLine($"Скрафчено. {(DateTime.Now - startingTime).TotalSeconds:f2} с");
+            Console.WriteLine();
+
+            var lines = animes.Select(anime => anime.TitleRu).Order();
+
+
+            DateTime startingTime2 = DateTime.Now;
+            Console.WriteLine("Сру...");
+
+            string dt = string.Format($"{DateTime.Now:u}").Replace(':', '.');
+            var names = new StringBuilder().AppendJoin(" ", usernames.Distinct()).ToString();
+
+            var resultFilename = $"Result {dt} {names}.txt";
+            Writer.WriteAllLines(resultFilename, lines);
+
+            Console.WriteLine("Насрано в " + resultFilename + $". {(DateTime.Now - startingTime2).TotalSeconds:f2} с");
+            Console.WriteLine();
+
+        }
+
+        private static FilterSettings GetFilterSettingsFromUI()
+        {
+            var filterSettings = new FilterSettings();
+            Console.WriteLine("Нажмите F чтобы изменить настройки фильтрации, или любую клавишу для применения настроек по умолчанию");
+            if (Console.ReadKey(true).Key == ConsoleKey.F)
+            {
+                Console.WriteLine("Укажите значения (N/Q/-/Z - нет, остальные - да)");
+
+                var dicSetAction = (Dictionary<string, bool> dic) =>
+                {
+                    foreach (var keyValuePair in dic)
+                    {
+                        Console.Write(keyValuePair.Key != "" ? keyValuePair.Key : "unknown");
+                        var key = Console.ReadKey(true).Key;
+                        bool anwser = !new ConsoleKey[] { ConsoleKey.N, ConsoleKey.Q, ConsoleKey.Z, ConsoleKey.OemMinus }.Contains(key);
+
+                        Console.WriteLine(anwser ? " +" : " -");
+                        dic[keyValuePair.Key] = anwser;
+                    }
+                };
+
+                Console.WriteLine();
+                dicSetAction(filterSettings.shiki_status);
+                Console.WriteLine();
+                dicSetAction(filterSettings.series_type);
+            }
+            Console.WriteLine();
+            return filterSettings;
+        }
+
+        private static List<string> GetUsernamesFromUI()
+        {
+            List<string> usernames = new List<string>();
             string? tmpUsername;
             do
             {
@@ -66,40 +131,11 @@ namespace AnimeListCrafter
 
                 Console.WriteLine();
             } while (tmpUsername != null);
+            return usernames;
+        }
 
-            if (usernames.Count == 0)
-            {
-                Console.WriteLine("Рил?");
-                return;
-            }
-
-            var filterSettings = new FilterSettings();
-            Console.WriteLine("Нажмите F чтобы изменить настройки фильтрации, или любую клавишу для применения настроек по умолчанию");
-            if (Console.ReadKey(true).Key == ConsoleKey.F)
-            {
-                Console.WriteLine("Укажите значения (N/Q/-/Z - нет, остальные - да)");
-
-                var dicSetAction = (Dictionary<string, bool> dic) =>
-                {
-                    foreach (var keyValuePair in dic)
-                    {
-                        Console.Write(keyValuePair.Key != "" ? keyValuePair.Key : "unknown");
-                        var key = Console.ReadKey(true).Key;
-                        bool anwser = !new ConsoleKey[] { ConsoleKey.N, ConsoleKey.Q, ConsoleKey.Z, ConsoleKey.OemMinus }.Contains(key);
-
-                        Console.WriteLine(anwser ? " +" : " -");
-                        dic[keyValuePair.Key] = anwser;
-                    }
-                };
-
-                Console.WriteLine();
-                dicSetAction(filterSettings.shiki_status);
-                Console.WriteLine();
-                dicSetAction(filterSettings.series_type);
-            }
-            Console.WriteLine();
-
-
+        private static List<Anime>? CraftAnimesWithRuTitlesFromShikimori(List<string> usernames, FilterSettings filterSettings)
+        {
             var animeListFiles = usernames.Select(u => Exporter.ExportAnimeListFromShikiToFileXml(u));
             var animeLists = animeListFiles.Select(u => Parser.ImportAnimeListFromXml(u)
                 .Where(anime => filterSettings.shiki_status.GetValueOrDefault(anime.shiki_status, false))
@@ -109,43 +145,22 @@ namespace AnimeListCrafter
 
             var animeListFilesJson = usernames.Select(u => Exporter.ExportAnimeListFromShikiToFileJson(u));
             var animeListsJson = animeListFilesJson.Select(u => Parser.ImportIdAndTitlesRuFromJson(u));
-            var idTirleRuDictionary = animeListsJson.SelectMany(list => list)
+            var idTitleRuDictionary = animeListsJson.SelectMany(list => list)
                 .DistinctBy(e => e.Key)
                 .ToDictionary(e => e.Key, e => e.Value);
 
-
-            DateTime startingTime = DateTime.Now;
-            Console.WriteLine("Крафчу");
-
             foreach (var anime in animes)
             {
-                var titleRu = idTirleRuDictionary.GetValueOrDefault(anime.series_animedb_id, "");
+                var titleRu = idTitleRuDictionary.GetValueOrDefault(anime.series_animedb_id, "");
                 if (string.IsNullOrEmpty(titleRu))
                     titleRu = anime.series_title;
 
                 anime.TitleRu = titleRu;
             }
 
-            Console.WriteLine("В");
-
-            var lines = animes.Select(anime => anime.TitleRu).Order();
-
-            Console.WriteLine($"Скрафчено. {(DateTime.Now - startingTime).TotalSeconds:f2} с");
-            Console.WriteLine();
-
-            DateTime startingTime2 = DateTime.Now;
-            Console.WriteLine("Сру...");
-
-            string dt = string.Format($"{DateTime.Now:u}").Replace(':', '.');
-            var names = new StringBuilder().AppendJoin(" ", usernames.Distinct()).ToString();
-
-            var resultFilename = $"Result {dt} {names}.txt";
-            Writer.WriteAllLines(resultFilename, lines);
-
-            Console.WriteLine("Насрано в " + resultFilename + $". {(DateTime.Now - startingTime2).TotalSeconds:f2} с");
-            Console.WriteLine();
-
+            return animes;
         }
+
     }
 }
 //TODO switch xml downloading to xmldoc.Load
